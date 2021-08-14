@@ -79,9 +79,39 @@ class RoomManager
 {
 	constructor()
 	{
+		// Contains all room objects
 		this.room = [];
-		this.roomButton = [];
-		this.currentRoom = 0;
+		// The number of items in each row of the room array.
+		this.roomLayerLength = [0];
+		// x and y index for the room array
+		this.currentRoom = [0, 0];
+	}
+
+	update()
+	{
+		if (this.room.length > 0)
+		{
+			this.room[this.currentRoom[0] * this.currentRoom[1]].update();
+			this.currentRoom = this.room[this.currentRoom[0] + this.currentRoom[1] * this.roomLayerLength.length].currentRoom;
+		}
+	}
+
+	addRoom(layer, name = "Room Name", url)
+	{
+		let offset = 0;
+		for (let i = 0; i < layer; i++)
+		{
+			offset += this.roomLayerLength[i];
+		}
+		this.room.splice(offset, 0, new Room);
+		this.room[offset].name = name;
+		this.room[offset].textureURL = url;
+		this.room[offset].image.src = this.room[offset].textureURL;
+		this.roomLayerLength[layer] += 1;
+		// Coordinates for the currently active room in the room array. The first room in the first row would be [0, 0].
+		// The third room in the second row would be [1, 2];
+		// This prevents a room from switching back to the first room in the room array, as the room objects' currentRoom variable is initialized with 0.
+		this.room[offset].currentRoom = [layer, this.roomLayerLength[layer]];
 	}
 }
 
@@ -95,45 +125,64 @@ class Room
 		this.image.src = this.textureURL;
 		this.x = 0;
 		this.y = 0;
-		// Which room leads to this room.
-		this.parentRoom = 0;
-		// References any rooms that this room leads to.
-		this.childRoom = [];
-		// Which button leads to a specified room.
-		this.childRoomButton = [];
-		// Holds the index for the childRoom array.
-		this.currentRoom = -1;
+		// The buttons this room has.
+		this.button = [];
+		// The rooms the buttons lead to. Indexed according to the roomManager array of rooms.
+		this.buttonTargetRoom = [];
+		this.currentRoom = [];
 	}
 
 	update()
 	{
-		this.handleInput();
+		//console.log("Room " + this.name + "this.button.length " + this.button.length + "\n");
+		// Draw room.
 		this.draw();
+		// Update buttons of this room.
+		let firstClick = false;
+		for (let i = 0; i < this.button.length; i++)
+		{
+			this.button[i].update();
+
+			// If no other button has been clicked before in this tick.
+			if (firstClick == false)
+			{
+				if (this.button[i].isPressed)
+				{
+					// If the pressed button actually leads to a room.
+					if (this.buttonTargetRoom[i] != false)
+					{
+						this.currentRoom = this.buttonTargetRoom[i];
+						firstClick = true;
+					}
+				}
+			}
+		}
+	}
+
+	addButton(text, target = false, x, y, width = 150, height = 50)
+	{
+		let i = this.button.length;
+		this.button[i] = new Button;
+		this.button[i].text = text;
+		this.button[i].x = x;
+		this.button[i].y = y;
+		this.button[i].width = width;
+		this.button[i].height = height;
+		this.buttonTargetRoom[i] = target;
 	}
 
 	handleInput()
 	{
-		for (let i = 0; i < this.childRoomButton.length; i++)
-		{
-			this.childRoomButton[i].update();
-			if (this.childRoomButton[i].isPressed)
-			{
-				this.currentRoom = i;
-			}
-		}
 	}
 
 	draw()
 	{
-		if (this.currentRoom != -1)
-		{
-			ctx.drawImage(this.childRoom[this.currentRoom].image, this.x, this.y, SCREEN_WIDTH, SCREEN_HEIGHT);
-			// Draw all buttons that lead to the next rooms.
-			for (let i = 0; i < this.childRoom[this.currentRoom].childRoomButton.length; i++)
-			{
-				this.childRoom[this.currentRoom].childRoomButton[i].update();
-			}
-		}
+		// Draw room image
+		ctx.drawImage(this.image, this.x, this.y, SCREEN_WIDTH, SCREEN_HEIGHT);
+	}
+
+	playAudio()
+	{
 	}
 }
 
@@ -170,17 +219,8 @@ class Button
     update()
     {
         this.collisionDetection();
-        if (this.isVisible)
-        {
-            this.draw();
-        }
-		if (this.playSound)
-		{
-			if (this.isPressed)
-			{
-				if (audioButtonPressedIsReady) { audioButtonPressed.play(); };
-			}
-		}
+		this.draw();
+		this.playAudio();
     }
 
     collisionDetection()
@@ -228,54 +268,60 @@ class Button
 
     draw()
     {
-        // Draw fill
-        ctx.fillStyle = this.faceColor;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+		if (this.isVisible)
+		{
+			// Draw fill
+			ctx.fillStyle = this.faceColor;
+			ctx.fillRect(this.x, this.y, this.width, this.height);
 
-        // Draw border
-        ctx.strokeStyle = this.edgeColor;
-        ctx.strokeRect(this.x, this.y, this.width, this.height);
+			// Draw border
+			ctx.strokeStyle = this.edgeColor;
+			ctx.strokeRect(this.x, this.y, this.width, this.height);
 
-        // Draw text
-        let textPosX = this.x + (this.width / 2),
-            textPosY = this.y + (this.height / 1.5),
-            textSize = this.height/1.5;
+			// Draw text
+			let textPosX = this.x + (this.width / 2),
+				textPosY = this.y + (this.height / 1.5),
+				textSize = this.height/1.5;
 
-        ctx.textAlign = "center";
-        ctx.font = this.height / 2 + "px sans-serif";
+			ctx.textAlign = "center";
+			ctx.font = this.height / 2 + "px sans-serif";
 
-        // Text shadow
-        ctx.fillStyle = this.colTextShadow;
-        ctx.fillText(this.text, textPosX + textSize/128, textPosY + textSize/128);
+			// Text shadow
+			ctx.fillStyle = this.colTextShadow;
+			ctx.fillText(this.text, textPosX + textSize/128, textPosY + textSize/128);
 
-        // Actual text
-        ctx.fillStyle = this.colTextFill;
-        ctx.fillText(this.text, textPosX, textPosY);
+			// Actual text
+			ctx.fillStyle = this.colTextFill;
+			ctx.fillText(this.text, textPosX, textPosY);
+		}
 
     }
+
+	playAudio()
+	{
+		if (this.playSound)
+		{
+			if (this.isPressed)
+			{
+				if (audioButtonPressedIsReady) { audioButtonPressed.play(); };
+			}
+		}
+	}
 }
 
-// Create root room and assign subrooms as well as buttons to it.
-let rootRoom = new Room;
-rootRoom.childRoom = [rootRoom, new Room, new Room, new Room];
-rootRoom.childRoomButton = [0, new Button, new Button, new Button];
-// Left corridor
-rootRoom.childRoomButton[1].text = "Check left";
-rootRoom.childRoomButton[1].x = 50;
-rootRoom.childRoomButton[1].y = 50;
-rootRoom.childRoom[1].textureURL = "textures/rootRoomLeftCorridor.png";
-rootRoom.childRoom[1].image.src = rootRoom.childRoomButton[1].textureURL;
-// Right corridor
-rootRoom.childRoomButton[3].text = "Check right";
-rootRoom.childRoomButton[3].x = SCREEN_WIDTH-50;
-rootRoom.childRoomButton[3].y = 50;
-rootRoom.childRoom[3].textureURL = "textures/rootRoomRightCorridor.png";
-rootRoom.childRoom[3].image.src = rootRoom.childRoomButton[3].textureURL;
+let roomManager = new RoomManager;
+roomManager.addRoom(0, "Root Room", "textures/roomRoot.png");
+roomManager.room[0].addButton("Check left", [1, 0], 50, 50);
+roomManager.room[0].addButton("Nothing here", false, SCREEN_WIDTH/2-75, 50);
+roomManager.room[0].addButton("Check right", false, SCREEN_WIDTH-200, 50);
+
+//roomManager.addRoom(0, "Another Root Room", "textures/roomRoot.png");
+
+roomManager.addRoom(1, "Left Corridor", "textures/roomRootLeftCorridor.png");
 
 
 
 let player = new Player;
-player.currentRoom = rootRoom;
 
 // Time variables
 let tp1 = Date.now();
@@ -294,7 +340,7 @@ window.main = function ()
 
     ctx.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-	rootRoom.update();
+	roomManager.update();
 }
 
 // Start the game loop
